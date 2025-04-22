@@ -20,6 +20,7 @@ npm create vike@latest --- --react --tailwindcss --shadcn-ui --eslint
   * [Configuration](#configuration)
   * [Add Components to Your Project](#add-components-to-your-project)
 
+
 ## React
 
 This app is ready to start. It's powered by [Vike](https://vike.dev) and [React](https://react.dev/learn).
