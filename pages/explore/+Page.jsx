@@ -12,8 +12,9 @@ import {
   ChevronDown,
   ChevronUp
 } from "lucide-react";
-import { ApiClient } from "@/services/apiClient";
 import { useDebounce } from "@/hooks/useDebounce";
+import { useData } from "@/context/DataContextProvider";
+import { useAuth } from "@/context/AuthContextProvider";
 import { Link } from "@/components/Link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -80,7 +81,6 @@ const getTagName = (tag) => {
 // Argument Card Component
 const ArgumentCard = ({ argument }) => {
   const tags = argument.tags || [];
-
   return (
     <motion.div
       variants={animations.item}
@@ -160,17 +160,14 @@ const ArgumentCardSkeleton = () => (
 const Pagination = ({ currentPage, totalPages, onPageChange }) => {
   const pageNumbers = [];
   const currentPageNum = parseInt(currentPage, 10);
-
   // Calculate pages to display
   const maxPageButtons = 5;
   let startPage = Math.max(1, currentPageNum - Math.floor(maxPageButtons / 2));
   let endPage = Math.min(totalPages, startPage + maxPageButtons - 1);
-
   // Adjust if we're at the end
   if (endPage - startPage + 1 < maxPageButtons) {
     startPage = Math.max(1, endPage - maxPageButtons + 1);
   }
-
   for (let i = startPage; i <= endPage; i++) {
     pageNumbers.push(i);
   }
@@ -265,9 +262,13 @@ const Pagination = ({ currentPage, totalPages, onPageChange }) => {
 
 // Main ExplorePageComponent
 export default function ExplorePage() {
+  // Get data from contexts
+  const { argumentsList, tags: tagsList, fetchArguments, loadingArguments, pagination, error: contextError } = useData();
+  const { isAuthenticated } = useAuth();
+  
   // URL Parameters parsing
   const pageContext = usePageContext();
-
+  
   // Function to parse and get URL parameters
   const getUrlParams = useCallback(() => {
     if (!isBrowser()) return { query: "", tags: [], sort: "newest", page: 1 };
@@ -285,7 +286,7 @@ export default function ExplorePage() {
       page: pageParam,
     };
   }, []);
-
+  
   // Function to update URL parameters
   const updateUrlParams = useCallback((params) => {
     if (!isBrowser()) return;
@@ -302,33 +303,28 @@ export default function ExplorePage() {
     // Update the URL without full page reload
     window.history.pushState({ path: newUrl }, "", newUrl);
   }, []);
-
+  
   // State
-  const [argumentsList, setArgumentsList] = useState([]);
-  const [tags, setTags] = useState([]);
   const [selectedTags, setSelectedTags] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [sortOption, setSortOption] = useState("newest");
-  const [isLoading, setIsLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [totalCount, setTotalCount] = useState(0);
   const [error, setError] = useState(null);
   const [showAllTags, setShowAllTags] = useState(false);
   const [filterExpanded, setFilterExpanded] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
-
+  
+  // Process tags for display
+  const processedTags = tagsList.map(tag => typeof tag === "object" ? tag.name : tag);
+  
   // Constants
   const ITEMS_PER_PAGE = 9;
   const MAX_VISIBLE_TAGS = 12;
   const MAX_MOBILE_TAGS = 6;
-
+  
   // Debounced search query
   const debouncedSearchQuery = useDebounce(searchQuery, 300);
-
-  // API client
-  const apiClient = new ApiClient();
-
+  
   // Check if mobile on client side
   useEffect(() => {
     if (isBrowser()) {
@@ -344,7 +340,7 @@ export default function ExplorePage() {
       };
     }
   }, []);
-
+  
   // Initialize from URL params
   useEffect(() => {
     const params = getUrlParams();
@@ -357,39 +353,17 @@ export default function ExplorePage() {
     const hasActiveFilters = params.query || params.tags.length > 0 || params.sort !== "newest";
     setFilterExpanded(!isMobile || hasActiveFilters);
   }, [getUrlParams, isMobile]);
-
-  // Fetch all available tags
-  useEffect(() => {
-    async function fetchTags() {
-      try {
-        const tagsData = await apiClient.getTags();
-        if (Array.isArray(tagsData)) {
-          const processedTags = tagsData.map((tag) =>
-            typeof tag === "object" ? tag.name : tag
-          );
-          setTags(processedTags);
-        }
-      } catch (error) {
-        console.error("Error fetching tags:", error);
-      }
-    }
-    
-    fetchTags();
-  }, []);
-
+  
   // Create filtered tags list
   const visibleTags = showAllTags 
-    ? tags 
+    ? processedTags 
     : isMobile 
-      ? tags.slice(0, MAX_MOBILE_TAGS)
-      : tags.slice(0, MAX_VISIBLE_TAGS);
-
+      ? processedTags.slice(0, MAX_MOBILE_TAGS)
+      : processedTags.slice(0, MAX_VISIBLE_TAGS);
+  
   // Fetch arguments based on filters
   useEffect(() => {
-    async function fetchArguments() {
-      setIsLoading(true);
-      setError(null);
-      
+    async function loadArguments() {
       try {
         // Make sure page parameter is explicitly a number
         const pageNumber = parseInt(currentPage, 10);
@@ -402,45 +376,26 @@ export default function ExplorePage() {
           page: pageNumber
         });
         
-        // Build API query params
+        // Build query params
         const queryParams = {
-          search: debouncedSearchQuery,
-          tags: selectedTags.join(","),
-          sort: sortOption,
           page: pageNumber,
           limit: ITEMS_PER_PAGE,
+          search: debouncedSearchQuery,
+          tags: selectedTags,
+          sort: sortOption
         };
         
-        console.log("Fetching arguments for page:", pageNumber, queryParams);
+        // Fetch data using the context method
+        await fetchArguments(queryParams);
         
-        // Fetch data from API
-        const response = await apiClient.getArguments(queryParams);
-        
-        if (response && response.data) {
-          setArgumentsList(response.data);
-          setTotalPages(response.totalPages || 1);
-          setTotalCount(response.totalCount || 0);
-        } else if (Array.isArray(response)) {
-          // Handle case where API returns array directly
-          setArgumentsList(response);
-          setTotalCount(response.length);
-          setTotalPages(Math.ceil(response.length / ITEMS_PER_PAGE));
-        } else {
-          console.warn("Unexpected API response format", response);
-          setArgumentsList([]);
-        }
-      } catch (error) {
-        console.error("Error fetching arguments:", error);
-        setError("Beim Laden der Argumente ist ein Fehler aufgetreten. Bitte versuche es später erneut.");
-        setArgumentsList([]);
-      } finally {
-        setIsLoading(false);
+      } catch (err) {
+        setError(err.message || "Beim Laden der Argumente ist ein Fehler aufgetreten.");
       }
     }
     
-    fetchArguments();
-  }, [debouncedSearchQuery, selectedTags, sortOption, currentPage]);
-
+    loadArguments();
+  }, [debouncedSearchQuery, selectedTags, sortOption, currentPage, fetchArguments, updateUrlParams]);
+  
   // Handler for tag selection
   const toggleTag = useCallback((tag) => {
     setSelectedTags((prev) =>
@@ -449,13 +404,13 @@ export default function ExplorePage() {
     setCurrentPage(1); // Reset to first page when filter changes
     setFilterExpanded(true); // Expand filters when a tag is selected
   }, []);
-
+  
   // Handler for sort option change
   const handleSortChange = (value) => {
     setSortOption(value);
     setCurrentPage(1); // Reset to first page when sort changes
   };
-
+  
   // Handler for page change
   const handlePageChange = (page) => {
     console.log("Page change requested:", page);
@@ -473,7 +428,7 @@ export default function ExplorePage() {
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
   };
-
+  
   // Reset all filters
   const resetFilters = () => {
     setSearchQuery("");
@@ -482,7 +437,7 @@ export default function ExplorePage() {
     setCurrentPage(1);
     updateUrlParams({});
   };
-
+  
   // Count of active filters
   const activeFilterCount = [
     debouncedSearchQuery ? 1 : 0,
@@ -496,7 +451,10 @@ export default function ExplorePage() {
       ? `1 Tag aktiv` 
       : `${selectedTags.length} Tags aktiv` 
     : "Keine Tags";
-
+    
+  // Get the current error (from context or local)
+  const displayError = error || contextError;
+  
   return (
     <div className="container mx-auto px-4 py-8">
       {/* Header Section */}
@@ -614,7 +572,7 @@ export default function ExplorePage() {
           </div>
           
           {/* Tags Section - Limited Display with Show More/Less */}
-          {tags.length > 0 && (
+          {processedTags.length > 0 && (
             <div className="mt-4">
               <div className="flex flex-wrap gap-2">
                 <div className="inline-flex items-center text-gray-500 mr-1">
@@ -648,8 +606,8 @@ export default function ExplorePage() {
                 ))}
                 
                 {/* Show More/Less button */}
-                {((!isMobile && tags.length > MAX_VISIBLE_TAGS) || 
-                  (isMobile && tags.length > MAX_MOBILE_TAGS)) && (
+                {((!isMobile && processedTags.length > MAX_VISIBLE_TAGS) || 
+                  (isMobile && processedTags.length > MAX_MOBILE_TAGS)) && (
                   <Button
                     variant="ghost"
                     size="sm"
@@ -662,7 +620,7 @@ export default function ExplorePage() {
                       </span>
                     ) : (
                       <span className="flex items-center text-xs">
-                        {isMobile ? "Mehr" : `Alle anzeigen (${tags.length - (isMobile ? MAX_MOBILE_TAGS : MAX_VISIBLE_TAGS)} mehr)`} <ChevronDown size={14} className="ml-1" />
+                        {isMobile ? "Mehr" : `Alle anzeigen (${processedTags.length - (isMobile ? MAX_MOBILE_TAGS : MAX_VISIBLE_TAGS)} mehr)`} <ChevronDown size={14} className="ml-1" />
                       </span>
                     )}
                   </Button>
@@ -702,16 +660,16 @@ export default function ExplorePage() {
       
       {/* Results Count and Loading */}
       <div className="flex items-center justify-between mb-4">
-        {!isLoading && !error && (
+        {!loadingArguments && !displayError && (
           <div className="text-gray-600">
-            {totalCount > 0
-              ? `${totalCount} ${
-                  totalCount === 1 ? "Argument" : "Argumente"
+            {pagination.totalCount > 0
+              ? `${pagination.totalCount} ${
+                  pagination.totalCount === 1 ? "Argument" : "Argumente"
                 } gefunden`
               : "Keine Argumente gefunden"}
           </div>
         )}
-        {isLoading && (
+        {loadingArguments && (
           <div className="flex items-center text-teal-600">
             <Loader2 size={18} className="animate-spin mr-2" />
             Argumente werden geladen...
@@ -721,9 +679,9 @@ export default function ExplorePage() {
       </div>
       
       {/* Main Content - Arguments Grid */}
-      {error ? (
+      {displayError ? (
         <div className="bg-red-50 text-red-500 p-6 rounded-lg border border-red-200 text-center">
-          <p>{error}</p>
+          <p>{displayError}</p>
           <Button
             variant="outline"
             className="mt-4 border-red-300 text-red-600 hover:bg-red-50"
@@ -732,7 +690,7 @@ export default function ExplorePage() {
             Filter zurücksetzen und erneut versuchen
           </Button>
         </div>
-      ) : isLoading ? (
+      ) : loadingArguments ? (
         <motion.div
           className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
           variants={animations.container}
@@ -787,10 +745,10 @@ export default function ExplorePage() {
       )}
       
       {/* Pagination */}
-      {!isLoading && !error && argumentsList.length > 0 && totalPages > 1 && (
+      {!loadingArguments && !displayError && argumentsList.length > 0 && pagination.totalPages > 1 && (
         <Pagination
           currentPage={currentPage}
-          totalPages={totalPages}
+          totalPages={pagination.totalPages}
           onPageChange={handlePageChange}
         />
       )}

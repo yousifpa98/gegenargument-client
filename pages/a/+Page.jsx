@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { usePageContext } from "vike-react/usePageContext";
 import { motion } from "framer-motion";
 import { format } from "date-fns";
@@ -15,6 +15,8 @@ import {
   ArrowRight,
   Link2,
 } from "lucide-react";
+import { useData } from "@/context/DataContextProvider";
+import { useAuth } from "@/context/AuthContextProvider";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -27,7 +29,6 @@ import {
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
 import { Link } from "@/components/Link";
-import { ApiClient } from "@/services/apiClient";
 import { Skeleton } from "@/components/ui/skeleton";
 
 // Helper function to safely check if we're in the browser
@@ -165,68 +166,81 @@ const SourceItem = ({ source }) => {
 
 export default function ArgumentDetailPage() {
   const pageContext = usePageContext();
+  const { getArgumentBySlug, loadingArguments, error: contextError } = useData();
   const [argument, setArgument] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
 
   // Get the slug from the URL
-  const getSlugFromUrl = () => {
+  const getSlugFromUrl = useCallback(() => {
     if (isBrowser()) {
-      const pathParts = window.location.pathname.split("/");
-      return pathParts[pathParts.length - 1];
+      // Get the current path
+      const path = window.location.pathname;
+      // Split path by '/' and get the last element
+      const segments = path.split('/').filter(Boolean);
+      return segments[segments.length - 1];
     }
 
     // For SSR, extract from pageContext
     if (pageContext && pageContext.urlPathname) {
-      const pathParts = pageContext.urlPathname.split("/");
-      return pathParts[pathParts.length - 1];
+      const segments = pageContext.urlPathname.split('/').filter(Boolean);
+      return segments[segments.length - 1];
     }
 
     return null;
-  };
+  }, [pageContext]);
 
-  const slug = getSlugFromUrl();
-
-  // Fetch the argument data
+  // Fix for browser back navigation
   useEffect(() => {
-    async function fetchArgument() {
-      if (!slug) {
-        setError("Argument nicht gefunden");
-        setIsLoading(false);
-        return;
-      }
-
-      setIsLoading(true);
-
-      try {
-        const apiClient = new ApiClient();
-        const data = await apiClient.getArgumentBySlug(slug);
-
-        if (data) {
-          setArgument(data);
-        } else {
-          setError("Argument nicht gefunden");
+    if (isBrowser()) {
+      const handlePopState = () => {
+        // This forces a re-fetch of argument data when navigating with browser back button
+        const currentSlug = getSlugFromUrl();
+        if (currentSlug) {
+          fetchArgument(currentSlug);
         }
-      } catch (err) {
-        console.error("Error fetching argument:", err);
-        setError("Fehler beim Laden des Arguments");
-      } finally {
-        setIsLoading(false);
-      }
+      };
+
+      window.addEventListener('popstate', handlePopState);
+      return () => window.removeEventListener('popstate', handlePopState);
+    }
+  }, [getSlugFromUrl]);
+
+  // Fetch argument function
+  const fetchArgument = useCallback(async (slug) => {
+    if (!slug) {
+      setError("Argument nicht gefunden");
+      return;
     }
 
-    fetchArgument();
-  }, [slug]);
+    try {
+      const data = await getArgumentBySlug(slug);
+      if (data) {
+        setArgument(data);
+      } else {
+        setError("Argument nicht gefunden");
+      }
+    } catch (err) {
+      console.error("Error fetching argument:", err);
+      setError("Fehler beim Laden des Arguments");
+    }
+  }, [getArgumentBySlug]);
+
+  // Initial data fetch
+  useEffect(() => {
+    const slug = getSlugFromUrl();
+    fetchArgument(slug);
+  }, [getSlugFromUrl, fetchArgument]);
 
   // Format creation date
   const formattedDate = argument ? formatDate(argument.createdAt) : null;
 
-  if (error) {
+  // Display error message
+  if (error || contextError) {
     return (
       <div className="container mx-auto px-4 py-8 max-w-4xl">
         <Alert variant="destructive" className="mb-8">
           <AlertCircle className="h-4 w-4" />
-          <AlertDescription>{error}</AlertDescription>
+          <AlertDescription>{error || contextError}</AlertDescription>
         </Alert>
 
         <div className="text-center py-8">
@@ -241,7 +255,8 @@ export default function ArgumentDetailPage() {
     );
   }
 
-  if (isLoading || !argument) {
+  // Display loading skeleton
+  if (loadingArguments || !argument) {
     return (
       <div className="container mx-auto px-4 py-8 max-w-4xl">
         <ArgumentSkeleton />
@@ -256,22 +271,6 @@ export default function ArgumentDetailPage() {
       initial="hidden"
       animate="visible"
     >
-      {/* Breadcrumb */}
-      <motion.div
-        className="text-sm text-gray-500 mb-6 flex items-center"
-        variants={animations.item}
-      >
-        <Link href="/" className="hover:text-teal-600">
-          Startseite
-        </Link>
-        <ArrowRight size={12} className="mx-2" />
-        <Link href="/explore" className="hover:text-teal-600">
-          Argumente
-        </Link>
-        <ArrowRight size={12} className="mx-2" />
-        <span className="text-teal-700 font-medium">Argument</span>
-      </motion.div>
-
       {/* Title Section */}
       <motion.div className="mb-8" variants={animations.header}>
         <h1 className="text-2xl md:text-3xl font-bold text-teal-700 mb-3">

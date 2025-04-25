@@ -1,16 +1,384 @@
 import React, { useState } from "react";
 import { usePageContext } from "vike-react/usePageContext";
 import { motion, AnimatePresence } from "framer-motion";
-import { Menu, X, Github, ChevronRight, ExternalLink } from "lucide-react";
+import {
+  Menu,
+  X,
+  Github,
+  ChevronRight,
+  ExternalLink,
+  User,
+  LogOut,
+  LogIn,
+  UserPlus,
+  Shield,
+  Check,
+  Settings,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Link } from "@/components/Link";
 import { Badge } from "@/components/ui/badge";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { AppProvider } from "@/context/AppProvider";
+import { useAuth } from "@/context/AuthContextProvider";
 import "./style.css";
 import "./tailwind.css";
 
-export function LayoutDefault({ children }) {
+// Login form component
+const LoginForm = ({ onSuccess, onSwitch }) => {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [formError, setFormError] = useState("");
+  const { login, loading } = useAuth();
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setFormError("");
+
+    try {
+      await login(email, password);
+      onSuccess();
+    } catch (err) {
+      setFormError(
+        err.message ||
+          "Anmeldung fehlgeschlagen. Bitte überprüfen Sie Ihre Eingaben."
+      );
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      {formError && (
+        <Alert
+          variant="destructive"
+          className="bg-red-50 text-red-800 border-red-200"
+        >
+          <AlertDescription>{formError}</AlertDescription>
+        </Alert>
+      )}
+
+      <div className="space-y-2">
+        <Label htmlFor="email">E-Mail</Label>
+        <Input
+          id="email"
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="ihre.email@beispiel.de"
+          required
+        />
+      </div>
+
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <Label htmlFor="password">Passwort</Label>
+          <Link
+            href="/passwort-vergessen"
+            className="text-xs text-teal-600 hover:text-teal-800"
+          >
+            Passwort vergessen?
+          </Link>
+        </div>
+        <Input
+          id="password"
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          required
+        />
+      </div>
+
+      <Button
+        type="submit"
+        className="w-full bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-600 hover:to-emerald-600"
+        disabled={loading}
+      >
+        {loading ? "Wird angemeldet..." : "Anmelden"}
+      </Button>
+
+      <div className="text-center mt-4 text-sm text-gray-600">
+        Noch kein Konto?{" "}
+        <button
+          type="button"
+          onClick={onSwitch}
+          className="text-teal-600 hover:text-teal-800 font-medium"
+        >
+          Jetzt registrieren
+        </button>
+      </div>
+    </form>
+  );
+};
+
+// Register form component
+const RegisterForm = ({ onSuccess, onSwitch }) => {
+  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [passwordConfirm, setPasswordConfirm] = useState("");
+  const [formError, setFormError] = useState("");
+  const { register, loading } = useAuth();
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setFormError("");
+
+    if (password !== passwordConfirm) {
+      setFormError("Die Passwörter stimmen nicht überein.");
+      return;
+    }
+
+    try {
+      await register(username, email, password);
+      onSuccess();
+    } catch (err) {
+      setFormError(
+        err.message ||
+          "Registrierung fehlgeschlagen. Bitte versuchen Sie es erneut."
+      );
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      {formError && (
+        <Alert
+          variant="destructive"
+          className="bg-red-50 text-red-800 border-red-200"
+        >
+          <AlertDescription>{formError}</AlertDescription>
+        </Alert>
+      )}
+
+      <div className="space-y-2">
+        <Label htmlFor="username">Benutzername</Label>
+        <Input
+          id="username"
+          type="text"
+          value={username}
+          onChange={(e) => setUsername(e.target.value)}
+          placeholder="IhrBenutzername"
+          required
+        />
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="email">E-Mail</Label>
+        <Input
+          id="email"
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="ihre.email@beispiel.de"
+          required
+        />
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="password">Passwort</Label>
+        <Input
+          id="password"
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          required
+        />
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="password-confirm">Passwort bestätigen</Label>
+        <Input
+          id="password-confirm"
+          type="password"
+          value={passwordConfirm}
+          onChange={(e) => setPasswordConfirm(e.target.value)}
+          required
+        />
+      </div>
+
+      <Button
+        type="submit"
+        className="w-full bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-600 hover:to-emerald-600"
+        disabled={loading}
+      >
+        {loading ? "Wird registriert..." : "Registrieren"}
+      </Button>
+
+      <div className="text-center mt-4 text-sm text-gray-600">
+        Bereits ein Konto?{" "}
+        <button
+          type="button"
+          onClick={onSwitch}
+          className="text-teal-600 hover:text-teal-800 font-medium"
+        >
+          Jetzt anmelden
+        </button>
+      </div>
+    </form>
+  );
+};
+
+// Main auth dialog component
+const AuthDialog = ({ isOpen, onClose }) => {
+  const [activeTab, setActiveTab] = useState("login");
+
+  const handleSuccess = () => {
+    onClose();
+  };
+
+  const switchTab = () => {
+    setActiveTab(activeTab === "login" ? "register" : "login");
+  };
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>
+            {activeTab === "login"
+              ? "Bei Gegenargument anmelden"
+              : "Bei Gegenargument registrieren"}
+          </DialogTitle>
+          <DialogDescription>
+            {activeTab === "login"
+              ? "Melden Sie sich mit Ihren Zugangsdaten an, um Argumente einzureichen und zu bewerten."
+              : "Erstellen Sie ein kostenloses Konto, um Argumente einzureichen und zu bewerten."}
+          </DialogDescription>
+        </DialogHeader>
+
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="login">Anmelden</TabsTrigger>
+            <TabsTrigger value="register">Registrieren</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="login" className="mt-4">
+            <LoginForm onSuccess={handleSuccess} onSwitch={switchTab} />
+          </TabsContent>
+
+          <TabsContent value="register" className="mt-4">
+            <RegisterForm onSuccess={handleSuccess} onSwitch={switchTab} />
+          </TabsContent>
+        </Tabs>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+// User menu component for authenticated users
+const UserMenu = () => {
+  const { user, logout, isAdmin, hasRole } = useAuth();
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="outline"
+          size="sm"
+          className="bg-teal-50 border-teal-200 text-teal-700 hover:bg-teal-100 hover:text-teal-800"
+        >
+          <User size={16} className="mr-2" />
+          <span className="max-w-24 truncate">
+            {user?.username || "Benutzer"}
+          </span>
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-56">
+        <DropdownMenuLabel>Mein Konto</DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem asChild>
+          <Link href="/profil" className="cursor-pointer">
+            <User size={16} className="mr-2" />
+            Profil
+          </Link>
+        </DropdownMenuItem>
+        <DropdownMenuItem asChild>
+          <Link href="/meine-argumente" className="cursor-pointer">
+            <ChevronRight size={16} className="mr-2" />
+            Meine Argumente
+          </Link>
+        </DropdownMenuItem>
+
+        {/* Moderator section */}
+        {hasRole("mod") && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel>Moderation</DropdownMenuLabel>
+            <DropdownMenuItem asChild>
+              <Link href="/moderation" className="cursor-pointer">
+                <Shield size={16} className="mr-2" />
+                Moderationsbereich
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link href="/moderation/prüfung" className="cursor-pointer">
+                <Check size={16} className="mr-2" />
+                Argument-Prüfung
+              </Link>
+            </DropdownMenuItem>
+          </>
+        )}
+
+        {/* Admin section */}
+        {isAdmin() && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel>Administration</DropdownMenuLabel>
+            <DropdownMenuItem asChild>
+              <Link href="/admin" className="cursor-pointer">
+                <Settings size={16} className="mr-2" />
+                Admin-Bereich
+              </Link>
+            </DropdownMenuItem>
+          </>
+        )}
+
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          onClick={logout}
+          className="text-red-600 focus:text-red-600 cursor-pointer"
+        >
+          <LogOut size={16} className="mr-2" />
+          Abmelden
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+};
+
+// Layout wrapper that provides the AppProvider
+function LayoutWithProviders({ children }) {
+  return (
+    <AppProvider>
+      <LayoutContent>{children}</LayoutContent>
+    </AppProvider>
+  );
+}
+
+// Layout content component that uses the context
+function LayoutContent({ children }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [authDialogOpen, setAuthDialogOpen] = useState(false);
   const pageContext = usePageContext();
+  const { user, isAuthenticated, loading } = useAuth();
 
   // Animation variants
   const pageVariants = {
@@ -23,8 +391,6 @@ export function LayoutDefault({ children }) {
     hover: { y: -2, scale: 1.05 },
     tap: { y: 1, scale: 0.98 },
   };
-
-  // Removed bubble animation for performance
 
   const navigation = [
     { name: "Startseite", href: "/" },
@@ -45,6 +411,14 @@ export function LayoutDefault({ children }) {
     { name: "Impressum", href: "/impressum" },
     { name: "Datenschutzerklärung", href: "/datenschutz" },
   ];
+
+  const openAuthDialog = () => {
+    setAuthDialogOpen(true);
+  };
+
+  const closeAuthDialog = () => {
+    setAuthDialogOpen(false);
+  };
 
   return (
     <div className="flex flex-col min-h-screen bg-gradient-to-br from-cyan-50 via-white to-amber-50">
@@ -114,10 +488,66 @@ export function LayoutDefault({ children }) {
                   </motion.div>
                 )
               )}
+
+              {/* Auth buttons/menu */}
+              <div className="ml-2">
+                {loading ? (
+                  <div className="h-9 w-24 bg-gray-100 rounded-md animate-pulse"></div>
+                ) : isAuthenticated ? (
+                  <UserMenu />
+                ) : (
+                  <div className="flex space-x-2">
+                    <motion.div
+                      whileHover="hover"
+                      whileTap="tap"
+                      variants={navItemVariants}
+                    >
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-teal-600 hover:text-teal-800 hover:bg-teal-50"
+                        onClick={openAuthDialog}
+                      >
+                        <LogIn size={16} className="mr-1" />
+                        Anmelden
+                      </Button>
+                    </motion.div>
+
+                    <motion.div
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                    >
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="border-teal-200 bg-teal-50 text-teal-700 hover:bg-teal-100"
+                        onClick={openAuthDialog}
+                      >
+                        <UserPlus size={16} className="mr-1" />
+                        Registrieren
+                      </Button>
+                    </motion.div>
+                  </div>
+                )}
+              </div>
             </nav>
 
             {/* Mobile menu button */}
             <div className="flex items-center md:hidden">
+              {!loading && isAuthenticated ? (
+                <UserMenu />
+              ) : !loading ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mr-2 border-teal-200 bg-teal-50 text-teal-700 hover:bg-teal-100"
+                  onClick={openAuthDialog}
+                >
+                  <LogIn size={16} className="mr-1" />
+                  Anmelden
+                </Button>
+              ) : null}
+
               <button
                 onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
                 className="p-2 rounded-md text-teal-600 hover:bg-teal-50 focus:outline-none transition-transform hover:scale-105 active:scale-95"
@@ -182,23 +612,44 @@ export function LayoutDefault({ children }) {
                     <ChevronRight size={16} />
                   </Button>
                 </motion.div>
+
+                {/* Auth buttons for mobile */}
+                {!isAuthenticated && (
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ delay: 0.3, type: "spring" }}
+                  >
+                    <Button
+                      variant="outline"
+                      className="w-full mt-2 border-teal-200 bg-teal-50 text-teal-700 hover:bg-teal-100"
+                      onClick={() => {
+                        setMobileMenuOpen(false);
+                        openAuthDialog();
+                      }}
+                    >
+                      <LogIn size={16} className="mr-2" />
+                      <span>Anmelden / Registrieren</span>
+                    </Button>
+                  </motion.div>
+                )}
               </motion.div>
             </motion.div>
           )}
         </AnimatePresence>
       </header>
 
+      {/* Auth dialog */}
+      <AuthDialog isOpen={authDialogOpen} onClose={closeAuthDialog} />
+
       {/* Main content with decorative background elements */}
       <main className="flex-grow relative">
         {/* Decorative background elements */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
           {/* Colorful blurred circles */}
-          {/* Static background elements instead of animated ones for better performance */}
           <div className="absolute -top-40 -left-40 w-96 h-96 bg-cyan-200 rounded-full mix-blend-multiply filter blur-3xl opacity-40" />
           <div className="absolute top-20 right-0 w-96 h-96 bg-amber-200 rounded-full mix-blend-multiply filter blur-3xl opacity-40" />
           <div className="absolute bottom-0 left-1/4 w-80 h-80 bg-emerald-200 rounded-full mix-blend-multiply filter blur-3xl opacity-40" />
-
-          {/* Removed floating bubbles for performance */}
         </div>
 
         {/* Page content with transitions */}
@@ -317,4 +768,10 @@ export function LayoutDefault({ children }) {
     </div>
   );
 }
+
+// Export the wrapped layout
+export function LayoutDefault({ children }) {
+  return <LayoutWithProviders>{children}</LayoutWithProviders>;
+}
+
 export default LayoutDefault;

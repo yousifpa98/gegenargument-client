@@ -12,7 +12,8 @@ import {
 import { Link } from "@/components/Link";
 import { Search, ArrowRight, Filter, ExternalLink } from "lucide-react";
 import { useDebounce } from "@/hooks/useDebounce";
-import { ApiClient } from "@/services/apiClient";
+import { useData } from "@/context/DataContextProvider";
+import { useAuth } from "@/context/AuthContextProvider";
 
 // Animation variants
 const animations = {
@@ -177,64 +178,48 @@ const SearchResult = ({ result }) => {
 
 // Main Page Component
 export default function IndexPage() {
+  // Get data from contexts
+  const {
+    argumentsList,
+    tags: tagsList,
+    fetchArguments,
+    searchArguments,
+    loadingArguments,
+    loadingTags,
+  } = useData();
+  const { isAuthenticated } = useAuth();
+
   // State
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState([]);
-  const [tags, setTags] = useState([]);
   const [selectedTags, setSelectedTags] = useState([]);
   const [featuredArguments, setFeaturedArguments] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
+
+  // Process tags for display
+  const processedTags = tagsList.map((tag) =>
+    typeof tag === "object" ? tag.name : tag
+  );
 
   // Debounce search query
   const debouncedSearchQuery = useDebounce(searchQuery, 300);
 
-  // Initialize API client
-  const apiClient = new ApiClient();
-
   // Fetch initial data
   useEffect(() => {
     async function fetchInitialData() {
-      setIsLoading(true);
       try {
-        const [argumentsRes, tagsRes] = await Promise.allSettled([
-          apiClient.getArguments(),
-          apiClient.getTags(),
-        ]);
-
-        // ✅ Featured Arguments
-        if (argumentsRes.status === "fulfilled") {
-          const res = argumentsRes.value;
-
-          const data = Array.isArray(res)
-            ? res
-            : Array.isArray(res?.data)
-            ? res.data
-            : [];
-
-          setFeaturedArguments(data.slice(0, 6));
-        } else {
-          console.warn("Failed to fetch arguments:", argumentsRes.reason);
-        }
-
-        // ✅ Tags
-        if (tagsRes.status === "fulfilled" && Array.isArray(tagsRes.value)) {
-          const processedTags = tagsRes.value.map((tag) =>
-            typeof tag === "object" ? tag.name : tag
-          );
-          setTags(processedTags);
-        } else {
-          console.warn("Failed to fetch tags or invalid format:", tagsRes);
+        // Fetch arguments for featured display
+        const data = await fetchArguments({ limit: 6, sort: "newest" });
+        if (data?.data) {
+          setFeaturedArguments(data.data);
         }
       } catch (error) {
-        console.error("Unexpected error while fetching initial data:", error);
-      } finally {
-        setIsLoading(false);
+        console.error("Error fetching initial data:", error);
       }
     }
 
     fetchInitialData();
-  }, []);
+  }, [fetchArguments]);
 
   // Handle search
   useEffect(() => {
@@ -247,18 +232,14 @@ export default function IndexPage() {
       setIsSearching(true);
 
       try {
-        // Build tag query string if needed
-        const tagParam = selectedTags.length ? selectedTags.join(",") : "";
-
-        // Perform search
-        const results = await apiClient.searchArguments(
+        // Perform search using the context method
+        const results = await searchArguments(
           debouncedSearchQuery,
-          tagParam
+          selectedTags
         );
 
         if (Array.isArray(results)) {
           setSearchResults(results);
-          console.log("Search results:", results); // Debug log
         } else {
           console.warn("Search response is not an array");
           setSearchResults([]);
@@ -272,7 +253,7 @@ export default function IndexPage() {
     }
 
     performSearch();
-  }, [debouncedSearchQuery, selectedTags]);
+  }, [debouncedSearchQuery, selectedTags, searchArguments]);
 
   // Toggle tag selection
   const toggleTag = useCallback((tag) => {
@@ -342,13 +323,13 @@ export default function IndexPage() {
         </div>
 
         {/* Tag filters */}
-        {tags.length > 0 && (
+        {processedTags.length > 0 && (
           <div className="mb-6 flex flex-wrap gap-2">
             <div className="inline-flex items-center text-gray-500 mr-1">
               <Filter size={16} className="mr-1" />
               <span className="text-sm font-medium">Filter:</span>
             </div>
-            {tags.slice(0, 10).map((tag) => (
+            {processedTags.slice(0, 10).map((tag) => (
               <Badge
                 key={tag}
                 variant={selectedTags.includes(tag) ? "default" : "outline"}
@@ -480,7 +461,7 @@ export default function IndexPage() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-6xl mx-auto">
-          {isLoading ? (
+          {loadingArguments ? (
             // Loading placeholders
             Array.from({ length: 6 }).map((_, index) => (
               <ShimmerCard key={`placeholder-${index}`} />
